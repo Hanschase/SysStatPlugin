@@ -1,48 +1,58 @@
 from pkg.plugin.context import register, handler, llm_func, BasePlugin, APIHost, EventContext
-from pkg.plugin.events import *  # 导入事件类
+from pkg.command.operator import operator_class,CommandOperator
+from pkg.command import operator, entities, cmdmgr, errors
+from pkg.plugin.events import *
+
+import os
+import psutil
 
 
+# 注册命令
+@operator_class(name="sys", help ="查看系统状态", usage="!cmd 或者 !sysstat")
+class SysStatcmd(CommandOperator):
+    """
+    注册插件说明而已，实现还是靠插件实现
+    """
+    async def execute(
+            self,
+            context: entities.ExecuteContext
+    ):
+        pass
 # 注册插件
-@register(name="Hello", description="hello world", version="0.1", author="RockChinQ")
-class MyPlugin(BasePlugin):
+@register(name="SysStat", description="查看系统状态(原作者：RockChinQ，Hanschase修改版)", version="0.1", author="Hanshcase")
+class SysStatPlugin(BasePlugin):
 
     # 插件加载时触发
     def __init__(self, host: APIHost):
         pass
 
-    # 异步初始化
-    async def initialize(self):
-        pass
-
-    # 当收到个人消息时触发
-    @handler(PersonNormalMessageReceived)
-    async def person_normal_message_received(self, ctx: EventContext):
-        msg = ctx.event.text_message  # 这里的 event 即为 PersonNormalMessageReceived 的对象
-        if msg == "hello":  # 如果消息为hello
-
-            # 输出调试信息
-            self.ap.logger.debug("hello, {}".format(ctx.event.sender_id))
-
-            # 回复消息 "hello, <发送者id>!"
-            ctx.add_return("reply", ["hello, {}!".format(ctx.event.sender_id)])
-
-            # 阻止该事件默认行为（向接口获取回复）
+    @handler(PersonCommandSent)
+    @handler(GroupCommandSent)
+    async def command_send(self, ctx: EventContext):
+        if ctx.event.command == "sysstat" or ctx.event.command == "sys":
             ctx.prevent_default()
+            ctx.prevent_postorder()
+            core_mem = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+            sysmem_info = psutil.virtual_memory()
+            cpu_info = psutil.cpu_times
+            disk_info = psutil.disk_usage('/')
+            cpu_ststs = psutil.cpu_stats()
+            cpu_freq = psutil.cpu_freq()
+            
+            res = f"""====系统状态====
+进程内存占用: {core_mem:.2f}MB
+总内存: {sysmem_info.total / 1024 / 1024:.2f}MB
+已用内存: {sysmem_info.used / 1024 / 1024:.2f}MB
+空闲内存: {sysmem_info.free / 1024 / 1024:.2f}MB
+内存使用率: {sysmem_info.percent:.2f}%
+CPU使用率: {psutil.cpu_percent(interval=1):.2f}%
+总磁盘空间: {disk_info.total / 1024 / 1024 / 1024:.2f}GB
+已用磁盘空间: {disk_info.used / 1024 / 1024 / 1024:.2f}GB
+空闲磁盘空间: {disk_info.free / 1024 / 1024 / 1024:.2f}GB
+磁盘使用率: {disk_info.percent:.2f}%
+============"""
 
-    # 当收到群消息时触发
-    @handler(GroupNormalMessageReceived)
-    async def group_normal_message_received(self, ctx: EventContext):
-        msg = ctx.event.text_message  # 这里的 event 即为 GroupNormalMessageReceived 的对象
-        if msg == "hello":  # 如果消息为hello
-
-            # 输出调试信息
-            self.ap.logger.debug("hello, {}".format(ctx.event.sender_id))
-
-            # 回复消息 "hello, everyone!"
-            ctx.add_return("reply", ["hello, everyone!"])
-
-            # 阻止该事件默认行为（向接口获取回复）
-            ctx.prevent_default()
+            ctx.add_return("reply",[res.strip()])
 
     # 插件卸载时触发
     def __del__(self):
